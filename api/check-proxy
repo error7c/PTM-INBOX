@@ -2,13 +2,29 @@ const { SocksProxyAgent } = require('socks-proxy-agent');
 const axios = require('axios');
 
 export default async function handler(req, res) {
-    if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+    // 1. Handle CORS Preflight requests
+    if (req.method === 'OPTIONS') {
+        res.setHeader('Access-Control-Allow-Origin', '*');
+        res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+        res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+        return res.status(200).end();
+    }
+
+    // 2. Log method for debugging in Vercel Dashboard
+    console.log(`[P7M DEBUG] Method Received: ${req.method}`);
+
+    if (req.method !== 'POST') {
+        return res.status(405).json({ 
+            success: false, 
+            error: `Method ${req.method} Not Allowed. Use POST, Boss.` 
+        });
+    }
 
     const poolStr = process.env.PROXY_POOL || "";
     const pool = poolStr.split(',').filter(p => p.trim() !== "");
     
     if (pool.length === 0) {
-        return res.status(200).json({ success: false, error: "Environment Variable PROXY_POOL is missing or empty." });
+        return res.status(500).json({ success: false, error: "PROXY_POOL env is empty." });
     }
 
     const selectedProxy = pool[Math.floor(Math.random() * pool.length)];
@@ -16,11 +32,10 @@ export default async function handler(req, res) {
     
     try {
         const agent = new SocksProxyAgent(proxyUrl);
-        // Using a faster timeout (5s) so Vercel doesn't kill the process first
         const ipInfo = await axios.get('http://ip-api.com/json', { 
             httpAgent: agent, 
             httpsAgent: agent,
-            timeout: 5000 
+            timeout: 6000 
         });
 
         return res.status(200).json({
@@ -30,11 +45,10 @@ export default async function handler(req, res) {
             pool_size: pool.length
         });
     } catch (error) {
-        // Log the specific proxy that failed in Vercel Logs
-        console.error(`Proxy Failed: ${selectedProxy} | Error: ${error.message}`);
+        console.error(`Proxy Error: ${selectedProxy.split('@')[1]} | ${error.message}`);
         return res.status(200).json({ 
             success: false, 
-            error: `Node ${selectedProxy.split('@')[1]} is unreachable. Try again.` 
+            error: `AWS Node Offline: ${error.message}` 
         });
     }
 }
