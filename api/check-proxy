@@ -4,30 +4,37 @@ const axios = require('axios');
 export default async function handler(req, res) {
     if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
-    const pool = process.env.PROXY_POOL ? process.env.PROXY_POOL.split(',') : [];
-    if (pool.length === 0) return res.status(500).json({ success: false, error: "PROXY_POOL is empty, Boss." });
+    const poolStr = process.env.PROXY_POOL || "";
+    const pool = poolStr.split(',').filter(p => p.trim() !== "");
+    
+    if (pool.length === 0) {
+        return res.status(200).json({ success: false, error: "Environment Variable PROXY_POOL is missing or empty." });
+    }
 
-    // Pick a random proxy for the test
     const selectedProxy = pool[Math.floor(Math.random() * pool.length)];
-    const proxyUrl = `socks5h://${selectedProxy}`;
+    const proxyUrl = `socks5h://${selectedProxy.trim()}`;
     
     try {
         const agent = new SocksProxyAgent(proxyUrl);
+        // Using a faster timeout (5s) so Vercel doesn't kill the process first
         const ipInfo = await axios.get('http://ip-api.com/json', { 
             httpAgent: agent, 
             httpsAgent: agent,
-            timeout: 15000 
+            timeout: 5000 
         });
 
         return res.status(200).json({
             success: true,
             ip: ipInfo.data.query,
             isp: ipInfo.data.isp,
-            city: ipInfo.data.city,
-            country: ipInfo.data.country,
             pool_size: pool.length
         });
     } catch (error) {
-        return res.status(500).json({ success: false, error: "AWS Proxy Offline: " + error.message });
+        // Log the specific proxy that failed in Vercel Logs
+        console.error(`Proxy Failed: ${selectedProxy} | Error: ${error.message}`);
+        return res.status(200).json({ 
+            success: false, 
+            error: `Node ${selectedProxy.split('@')[1]} is unreachable. Try again.` 
+        });
     }
 }
