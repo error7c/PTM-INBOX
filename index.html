@@ -151,26 +151,39 @@
             document.getElementById('batch-container').classList.toggle('hidden', document.getElementById('rotation-mode').value !== 'continuous');
         }
 
-        async function connectServerProxy() {
+       async function connectServerProxy() {
     const light = document.getElementById('proxy-status-light');
     const display = document.getElementById('ip-details');
     light.className = "w-3 h-3 rounded-full bg-yellow-500 animate-pulse";
-    display.innerHTML = '<span class="text-blue-400 font-bold uppercase">Rotating Handshake...</span>';
+    display.innerHTML = '<span class="text-blue-400 font-bold uppercase text-[9px]">Handshaking...</span>';
     
     try {
-        const res = await fetch('/api/check-proxy', { method: 'POST', headers: { 'Content-Type': 'application/json' } });
+        const res = await fetch('/api/check-proxy', { 
+            method: 'POST', 
+            headers: { 'Content-Type': 'application/json' } 
+        });
+
+        // Check if response is actually JSON before parsing
+        if (!res.ok) {
+            const text = await res.text();
+            throw new Error(`Server Error ${res.status}: ${text.slice(0, 50)}`);
+        }
+
         const data = await res.json();
+        
         if (data.success) {
             light.className = "w-3 h-3 rounded-full bg-green-500 shadow-[0_0_15px_#22c55e]";
             display.innerHTML = `
-                <div class="text-green-500 font-bold">AWS POOL SECURED (${data.pool_size} Nodes)</div>
+                <div class="text-green-500 font-bold">AWS POOL SECURED (${data.pool_size})</div>
                 <p class="text-[9px] text-zinc-400">Node IP: ${data.ip}</p>
                 <p class="text-[9px] text-zinc-400">ISP: ${data.isp}</p>
             `;
-        } else { throw new Error(data.error); }
+        } else { 
+            throw new Error(data.error); 
+        }
     } catch (e) {
         light.className = "w-3 h-3 rounded-full bg-red-600 shadow-[0_0_10px_red]";
-        display.innerHTML = `<span class="text-red-500 font-bold">POOL OFFLINE</span><br><span class="text-[9px] text-zinc-400">${e.message}</span>`;
+        display.innerHTML = `<span class="text-red-500 font-bold text-[9px]">FAILED</span><br><span class="text-[9px] text-zinc-300">${e.message}</span>`;
     }
 }
         document.getElementById('f-attach').onchange = async function(e) {
